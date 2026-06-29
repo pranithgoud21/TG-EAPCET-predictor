@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TG EAPCET Seat Allotment Predictor</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f7fb; margin: 0; padding: 20px; color: #1e293b; }
+        header { border-bottom: 2px solid #e0e4ec; padding-bottom: 15px; margin-bottom: 20px; }
+        h1 { margin: 0; font-size: 24px; color: #0f172a; }
+        p.subtitle { margin: 5px 0 0 0; color: #64748b; font-size: 14px; }
+        .container { display: flex; gap: 20px; align-items: flex-start; }
+        .sidebar { background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); width: 300px; flex-shrink: 0; }
+        .sidebar h3 { margin-top: 0; margin-bottom: 15px; font-size: 16px; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+        label { display: block; margin-bottom: 12px; font-size: 14px; font-weight: 500; }
+        select, input[type="number"], input[type="text"] { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 14px; }
+        button { width: 100%; padding: 10px; background-color: #2563eb; color: white; border: none; border-radius: 4px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+        button:hover { background-color: #1d4ed8; }
+        .main-content { flex-grow: 1; background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 400px; }
+        .info-msg { background-color: #eff6ff; color: #1d4ed8; padding: 12px; border-radius: 6px; font-size: 14px; margin-bottom: 15px; border-left: 4px solid #3b82f6; }
+        .error-msg { color: #dc2626; font-weight: 500; margin-top: 20px; }
+        .custom-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+        .custom-table th { background-color: #f8fafc; padding: 12px 10px; border-bottom: 2px solid #cbd5e1; color: #475569; font-weight: 600; }
+        .custom-table td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+        .badge-women { background-color: #fce7f3; color: #9d174d; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-left: 6px; display: inline-block; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>TG EAPCET Seat Allotment Predictor</h1>
+        <p class="subtitle">Analysis portal operating directly inside your browser framework.</p>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            <h3>Search Configurations</h3>
+            
+            <label>
+                Counseling Phase
+                <select id="phaseSelect">
+                    <option value="phase1">Phase 1 Allotments</option>
+                    <option value="phase2">Phase 2 Allotments</option>
+                    <option value="final" selected>Final Phase Allotments</option>
+                </select>
+            </label>
+
+            <label>
+                Your Rank
+                <input type="number" id="userRank" value="15000" min="1">
+            </label>
+
+            <label>
+                Caste / Category
+                <select id="casteSelect">
+                    <option value="OC">OC</option>
+                    <option value="BC_A">BC_A</option>
+                    <option value="BC_B">BC_B</option>
+                    <option value="BC_C">BC_C</option>
+                    <option value="BC_D">BC_D</option>
+                    <option value="BC_E">BC_E</option>
+                    <option value="SC">SC</option>
+                    <option value="ST">ST</option>
+                </select>
+            </label>
+
+            <label>
+                Gender
+                <select id="genderSelect">
+                    <option value="BOYS">BOYS</option>
+                    <option value="GIRLS">GIRLS</option>
+                </select>
+            </label>
+
+            <h3 style="margin-top: 20px;">Advanced Filters</h3>
+            <label>Filter by Branch Code<input type="text" id="branchFilter" placeholder="e.g. CSE"></label>
+            <label>Filter by Inst Code<input type="text" id="instFilter" placeholder="e.g. CBIT"></label>
+            <label>Filter by Dist Code<input type="text" id="distFilter" placeholder="e.g. HYD"></label>
+
+            <button onclick="processPrediction()">Filter Allotments</button>
+        </div>
+
+        <div class="main-content">
+            <h2 id="matchCount" style="margin-top:0; font-size: 18px; color: #334155;">Matching Options Found</h2>
+            <div id="infoBanner" class="info-msg">Configure settings and click filter to process results.</div>
+            
+            <div style="overflow-x: auto;">
+                <table class="custom-table" id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Institution Name</th>
+                            <th>Place</th>
+                            <th>Dist</th>
+                            <th>Branch</th>
+                            <th>Type</th>
+                            <th>Last Cutoff</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+            <div id="errorView" class="error-msg" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let datasets = { phase1: [], phase2: [], final: [] };
+
+        async function loadJsonPools() {
+            const paths = { phase1: 'src/data/phase1.json', phase2: 'src/data/phase2.json', final: 'src/data/finalPhase.json' };
+            for (let key in paths) {
+                try {
+                    let response = await fetch(paths[key]);
+                    if (response.ok) datasets[key] = await response.json();
+                } catch (e) { console.warn("Failed to stream pool: " + paths[key]); }
+            }
+            processPrediction();
+        }
+
+        function processPrediction() {
+            const targetPhase = document.getElementById("phaseSelect").value;
+            const rankInput = parseInt(document.getElementById("userRank").value) || 0;
+            const targetCategory = document.getElementById("casteSelect").value + "_" + document.getElementById("genderSelect").value;
+            const currentGender = document.getElementById("genderSelect").value;
+
+            const branchQuery = document.getElementById("branchFilter").value.trim().toUpperCase();
+            const instQuery = document.getElementById("instFilter").value.trim().toUpperCase();
+            const distQuery = document.getElementById("distFilter").value.trim().toUpperCase();
+
+            const pool = datasets[targetPhase] || [];
+            let outputRows = [];
+
+            pool.forEach(item => {
+                if (!item) return;
+
+                let instCode = (item.inst_code || "").trim();
+                let fullString = (item.inst_name || "").trim();
+                let place = (item.place || "").trim();
+                let distCode = (item.dist_code || "").trim();
+                let branchCode = (item.branch_code || "").trim();
+                let coEd = (item.co_education || "").trim();
+                let cutoffRank = 999999;
+
+                const regex = /(.*?)\s+([A-Z]{3,4})\s+([A-Z]{3})\s+([A-Z]{3,4})\s+(COED|GIRLS|FEMALE)\s+([\d,]+)$/i;
+                const match = fullString.match(regex);
+
+                if (match) {
+                    fullString = match[1].trim();
+                    place = match[2].trim();
+                    distCode = match[3].trim();
+                    branchCode = match[4].trim();
+                    coEd = match[5].trim().toUpperCase();
+                    cutoffRank = parseInt(match[6].replace(/,/g, '')) || 999999;
+                } else {
+                    let standardRawVal = item[targetCategory] || "999999";
+                    cutoffRank = parseInt(standardRawVal.toString().replace(/,/g, '')) || 999999;
+                }
+
+                if (rankInput > cutoffRank) return;
+                if (currentGender === "BOYS" && (coEd === "GIRLS" || coEd === "FEMALE")) return;
+                if (branchQuery && !branchCode.toUpperCase().includes(branchQuery)) return;
+                if (instQuery && !instCode.toUpperCase().includes(instQuery)) return;
+                if (distQuery && !distCode.toUpperCase().includes(distQuery)) return;
+
+                outputRows.push({
+                    code: instCode, name: fullString, place: place, dist: distCode, branch: branchCode, type: coEd, cutoff: cutoffRank
+                });
+            });
+
+            outputRows.sort((a, b) => a.cutoff - b.cutoff);
+
+            document.getElementById("matchCount").innerText = `Matching Options Found (${outputRows.length} matches)`;
+            document.getElementById("infoBanner").innerHTML = `Showing options matching your rank (<b>${rankInput.toLocaleString()}</b>) vs the targeted <b>${targetCategory}</b> cutoff metric framework.`;
+
+            const tbody = document.getElementById("tableBody");
+            const errorView = document.getElementById("errorView");
+            const tableElem = document.getElementById("resultsTable");
+
+            tbody.innerHTML = "";
+
+            if (outputRows.length === 0) {
+                tableElem.style.display = "none";
+                errorView.style.display = "block";
+                errorView.innerText = "No historical options match your ranking cutoff parameters.";
+                return;
+            }
+
+            tableElem.style.display = "table";
+            errorView.style.display = "none";
+
+            outputRows.forEach(row => {
+                let badge = (row.type === "GIRLS" || row.type === "FEMALE") ? `<span class="badge-women">Women Only</span>` : '';
+                let tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td style="font-weight: bold; color: #0f172a;">${row.code}</td>
+                    <td style="font-weight: 500;">${row.name}${badge}</td>
+                    <td style="color: #475569;">${row.place}</td>
+                    <td style="text-transform: uppercase; color: #475569;">${row.dist}</td>
+                    <td style="font-weight: bold; color: #2563eb;">${row.branch}</td>
+                    <td style="font-size: 12px; color: #64748b; text-transform: uppercase;">${row.type}</td>
+                    <td style="font-weight: bold; color: #16a34a;">${row.cutoff.toLocaleString()}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        window.onload = loadJsonPools;
+    </script>
+</body>
+</html>
