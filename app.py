@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 import os
-import streamlit.components.v1 as components
+import pandas as pd
 
 # --- SYSTEM AUTO-ADAPTIVE CONFIGURATION ---
 st.set_page_config(
@@ -10,30 +10,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GLOBAL PURE WHITE TEXT OVERRIDE ---
+# --- THEME-ADAPTIVE STYLE OVERRIDE ---
 st.markdown(
     """
     <style>
-    /* Force ALL text, headings, labels, captions, and widget values to pure white */
-    html, body, .stApp, *, p, span, label, h1, h2, h3, h4, h5, h6, small, div, .stCaption, .stText {
-        color: #FFFFFF !important;
-    }
-    
-    /* Ensure selection item containers inside dropdowns display white text */
-    div[data-baseweb="select"] *, div[data-baseweb="input"] *, input {
-        color: #FFFFFF !important;
-    }
-
-    /* Keep dropdown options and inputs readable by styling their layout structure borders */
+    /* Clean up borders for the dropdown and input widgets without overriding global text colors */
     div[data-baseweb="select"], div[data-baseweb="input"] {
         border-radius: 8px !important;
-        border: 1px solid #cbd5e1 !important;
+        border: 1px solid rgba(128, 128, 128, 0.5) !important;
     }
     
-    /* Make the separating horizontal lines distinct */
+    /* Make the separating horizontal lines clean and subtle in both modes */
     hr {
-        border-color: #ffffff !important;
-        opacity: 0.4;
+        opacity: 0.2;
     }
     </style>
     """,
@@ -41,7 +30,7 @@ st.markdown(
 )
 
 st.title("TG EAPCET Seat Allotment Predictor")
-st.caption("Universal Category Matching Engine — Configured for Pure White Text.")
+st.caption("Universal Category Matching Engine — Light & Dark Mode Compatible.")
 
 # --- UI INPUT CONTROLS ---
 st.subheader("Predictor Parameters")
@@ -134,61 +123,44 @@ if os.path.exists(json_path):
 
             # --- MATCH PREDICTABILITY CRITERIA ---
             if user_rank <= cutoff_rank:
-                status_tag, status_color = "Safe Match", "#16a34a"
+                status_tag = "Safe Match"
             elif user_rank <= (cutoff_rank * 1.15): 
-                status_tag, status_color = "Risky Match", "#ea580c"
+                status_tag = "Risky Match"
             else:
                 continue
 
             filtered_results.append({
-                "Code": inst_code, "Name": inst_name_full, "Place": place, "Dist": dist_code, "Branch": branch_code, "Type": co_education, "Cutoff": cutoff_rank, "Status": status_tag, "Color": status_color
+                "Code": inst_code, 
+                "Institution Name": inst_name_full, 
+                "Place": place, 
+                "Dist": dist_code, 
+                "Branch": branch_code, 
+                "Type": co_education, 
+                "Last Cutoff": cutoff_rank, 
+                "Chances": status_tag
             })
         
-    filtered_results.sort(key=lambda x: (0 if x["Status"] == "Safe Match" else 1, x["Cutoff"]))
+    filtered_results.sort(key=lambda x: (0 if x["Chances"] == "Safe Match" else 1, x["Last Cutoff"]))
     
     st.markdown("---")
     st.subheader(f"Analysis Results ({len(filtered_results)} matches analyzed)")
     st.info(f"Active Filtering Column Target: **{caste.upper()}_{gender.upper()}**")
     
     if len(filtered_results) > 0:
-        table_rows = ""
-        for row in filtered_results:
-            women_badge = '<span style="background:#fce7f3;color:#9d174d;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:bold;margin-left:6px;">Women Only</span>' if row["Type"] in ["GIRLS", "FEMALE"] else ''
-            status_badge = f'<span style="background-color:{row["Color"]}; color:white; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold;">{row["Status"]}</span>'
-            
-            # The embedded iframe HTML table items are forced to white color text lines
-            table_rows += f"""
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.15);">
-                    <td style="padding:12px 10px; font-weight:bold; color:#FFFFFF;">{row['Code']}</td>
-                    <td style="padding:12px 10px; font-weight:500; color:#FFFFFF;">{row['Name']}{women_badge}</td>
-                    <td style="padding:12px 10px; color:#FFFFFF; opacity:0.85;">{row['Place']}</td>
-                    <td style="padding:12px 10px; text-transform:uppercase; color:#FFFFFF; opacity:0.85;">{row['Dist']}</td>
-                    <td style="padding:12px 10px; font-weight:bold; color:#3b82f6;">{row['Branch']}</td>
-                    <td style="padding:12px 10px; text-align:center;">{status_badge}</td>
-                    <td style="padding:12px 10px; font-weight:bold; color:#FFFFFF;">{row['Cutoff']:,}</td>
-                </tr>
-            """
-            
-        full_html = f"""
-        <div style="font-family:sans-serif; width:100%; padding:10px;">
-            <table style="width:100%; border-collapse:collapse; font-size:14px; text-align:left;">
-                <thead>
-                    <tr style="border-bottom:2px solid rgba(255,255,255,0.35);">
-                        <th style="padding:12px 10px; color:#FFFFFF; font-weight:700;">Code</th>
-                        <th style="padding:12px 10px; color:#FFFFFF; font-weight:700;">Institution Name</th>
-                        <th style="padding:12px 10px; color:#FFFFFF; font-weight:700;">Place</th>
-                        <th style="padding:12px 10px; color:#FFFFFF; font-weight:700;">Dist</th>
-                        <th style="padding:12px 10px; color:#FFFFFF; font-weight:700;">Branch</th>
-                        <th style="padding:12px 10px; color:#FFFFFF; font-weight:700; text-align:center;">Chances</th>
-                        <th style="padding:12px 10px; color:#FFFFFF; font-weight:700;">Last Cutoff</th>
-                    </tr>
-                </thead>
-                <tbody>{table_rows}</tbody>
-            </table>
-        </div>
-        """
-        components.html(full_html, height=650, scrolling=True)
+        # Convert data safely to a DataFrame
+        df = pd.DataFrame(filtered_results)
+        
+        # Display using the native Streamlit data container
+        st.dataframe(
+            df[["Code", "Institution Name", "Place", "Dist", "Branch", "Type", "Chances", "Last Cutoff"]],
+            use_container_width=True,
+            height=600,
+            column_config={
+                "Last Cutoff": st.column_config.NumberColumn(format="%d"),
+                "Chances": st.column_config.TextColumn(help="Admission safety tag prediction")
+            }
+        )
     else:
-        st.markdown("<p style='color:#ef4444; font-weight:bold;'>No matches found for your rank. Try adjusting your target rank value upward in the parameters above.</p>", unsafe_allow_html=True)
+        st.error("No matches found for your rank. Try adjusting your target rank value upward in the parameters above.")
 else:
-    st.markdown("<p style='color:#eab308; font-weight:bold;'>Data repository file assets are missing under src/data/</p>", unsafe_allow_html=True)
+    st.warning("Data repository file assets are missing under src/data/")
