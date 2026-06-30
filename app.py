@@ -79,6 +79,29 @@ if os.path.exists(json_path):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
+    # --- STEP 1: PRE-EXTRACT UNIQUE COLLEGES FOR THE SEARCH SELECTION ---
+    unique_colleges = set()
+    for item in data:
+        if item:
+            # Check both normal and clean key patterns to find the name safely
+            inst_name = item.get("INST_NAME", item.get("inst_name", ""))
+            if not inst_name:
+                for k, v in item.items():
+                    if str(k).upper().strip() == "INST_NAME":
+                        inst_name = v
+                        break
+            if inst_name:
+                unique_colleges.add(str(inst_name).strip())
+                
+    sorted_colleges = sorted(list(unique_colleges))
+    
+    # --- NEW COLLEGE SELECTION FILTER WIDGET ---
+    selected_colleges = st.multiselect(
+        "Filter Specific Colleges (Leave empty to search all institutions)",
+        options=sorted_colleges,
+        placeholder="Type or select college names..."
+    )
+        
     filtered_results = []
     
     for item in data:
@@ -114,6 +137,9 @@ if os.path.exists(json_path):
 
         # --- SELECTION FILTERS ---
         if cutoff_rank > 0 and cutoff_rank != 999999:
+            # Specific College Filter Match
+            if selected_colleges and inst_name_full not in selected_colleges:
+                continue
             if branch_choice != "ALL BRANCHES" and branch_choice != branch_code.upper():
                 continue
             if gender == "BOYS" and co_education in ["GIRLS", "FEMALE"]:
@@ -147,10 +173,8 @@ if os.path.exists(json_path):
     st.info(f"Active Filtering Column Target: **{caste.upper()}_{gender.upper()}**")
     
     if len(filtered_results) > 0:
-        # Convert data safely to a DataFrame
         df = pd.DataFrame(filtered_results)
         
-        # Display using the native Streamlit data container
         st.dataframe(
             df[["Code", "Institution Name", "Place", "Dist", "Branch", "Type", "Chances", "Last Cutoff"]],
             use_container_width=True,
@@ -161,6 +185,6 @@ if os.path.exists(json_path):
             }
         )
     else:
-        st.error("No matches found for your rank. Try adjusting your target rank value upward in the parameters above.")
+        st.error("No matches found for your criteria. Try adjusting your selections or target rank value upward.")
 else:
     st.warning("Data repository file assets are missing under src/data/")
